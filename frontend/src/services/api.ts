@@ -5,7 +5,7 @@ import {
   Feedback,
 } from '../types/index.js';
 
-const API_BASE = '/api/v1';
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api/v1';
 
 export class ApiError extends Error {
   statusCode: number;
