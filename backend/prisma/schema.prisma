@@ -1,0 +1,165 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  name         String
+  role         Role          @default(USER)
+  plan         Plan          @default(FREE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  refreshTokens  RefreshToken[]
+  diagnoses      DiagnosisSession[]
+  feedbacks      Feedback[]
+  usageRecords   UsageRecord[]
+
+  @@index([email])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+enum DiagnosisStatus {
+  DRAFT
+  ANALYZING
+  COMPLETED
+  FAILED
+  FOLLOW_UP_REQUIRED
+}
+
+model DiagnosisSession {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  category    String          // e.g. "appliances", "automotive", "electronics", "plumbing", "general"
+  description String?
+  deviceModel String?
+  symptoms    Json            @default("[]") // string array
+  status      DiagnosisStatus @default(DRAFT)
+  isFavorite  Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  images      DiagnosisImage[]
+  analysis    AnalysisResult?
+  questions   FollowUpQuestion[]
+  feedback    Feedback?
+
+  @@index([userId])
+  @@index([status])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model DiagnosisImage {
+  id           String           @id @default(cuid())
+  sessionId    String
+  session      DiagnosisSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  filename     String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  storagePath  String
+  url          String
+  width        Int?
+  height       Int?
+  createdAt    DateTime         @default(now())
+
+  @@index([sessionId])
+}
+
+model AnalysisResult {
+  id                      String           @id @default(cuid())
+  sessionId               String           @unique
+  session                 DiagnosisSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  detectedObject          String
+  detectedCategory        String
+  visibleEvidence         Json             @default("[]") // string array
+  possibleCauses          Json             @default("[]") // array of { title, likelihood, explanation, evidenceRef }
+  safeNextSteps           Json             @default("[]") // string array
+  toolsNeeded             Json             @default("[]") // string array
+  partsNeeded             Json             @default("[]") // string array
+  professionalRecommended Boolean          @default(false)
+  urgencyLevel            String           @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  safetyWarnings          Json             @default("[]") // string array
+  confidenceAssessment    String
+  isEvidenceSufficient    Boolean          @default(true)
+  modelUsed               String
+  promptVersion           String           @default("1.0")
+  rawResponse             Json?
+  createdAt               DateTime         @default(now())
+
+  @@index([sessionId])
+}
+
+model FollowUpQuestion {
+  id          String           @id @default(cuid())
+  sessionId   String
+  session     DiagnosisSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionText String
+  questionType String           @default("TEXT") // TEXT, CHOICE, YES_NO
+  options     Json?            // string array for CHOICE
+  answerText  String?
+  answeredAt  DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([sessionId])
+}
+
+model Feedback {
+  id              String           @id @default(cuid())
+  sessionId       String           @unique
+  session         DiagnosisSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isUseful        Boolean
+  problemResolved Boolean          @default(false)
+  actualOutcome   String?
+  userComment     String?
+  createdAt       DateTime         @default(now())
+
+  @@index([sessionId])
+  @@index([userId])
+}
+
+model UsageRecord {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId  String?
+  actionType String   @default("DIAGNOSIS")
+  monthYear  String   // e.g. "2026-10"
+  createdAt  DateTime @default(now())
+
+  @@index([userId, monthYear])
+}
